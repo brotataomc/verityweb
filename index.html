@@ -1,14 +1,11 @@
 <!DOCTYPE html>
 <html lang="en-us">
-
 <head>
-
     <meta charset="utf-8">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>THE Verity Mod (beta)</title>
 
     <style>
-
         html, body {
             margin: 0;
             padding: 0;
@@ -33,165 +30,111 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-
             color: white;
             font-family: Arial, sans-serif;
             font-size: 24px;
-
+            text-align: center;
             z-index: 10;
         }
-
     </style>
-
 </head>
 
 <body>
-
-    <div id="loading">
-        LOADING...
-    </div>
-
+    <div id="loading">LOADING...</div>
     <div id="gameContainer"></div>
 
-
     <script>
-
-        const BASE_URL = "./";
-
+        // The Unity WebGL files are hosted on GitHub Pages.
+        // This makes the index.html portable: an online HTML viewer
+        // can load this page while the actual game files stay online.
+        const BASE_URL =
+            "https://brotataomc-boop.github.io/verityweb/";
 
         async function fetchWithProgress(url) {
-
             const response = await fetch(url);
 
             if (!response.ok) {
                 throw new Error(
-                    "Failed to download: " + url
+                    "Failed to download: " + url +
+                    " (HTTP " + response.status + ")"
                 );
             }
 
             const reader = response.body.getReader();
-
-            const contentLength =
-                response.headers.get("Content-Length");
+            const contentLength = response.headers.get("Content-Length");
 
             let received = 0;
-            let chunks = [];
+            const chunks = [];
 
             while (true) {
+                const { done, value } = await reader.read();
 
-                const { done, value } =
-                    await reader.read();
-
-                if (done)
-                    break;
+                if (done) break;
 
                 chunks.push(value);
-
                 received += value.length;
 
                 if (contentLength) {
+                    const percent = Math.floor(
+                        (received / parseInt(contentLength, 10)) * 100
+                    );
 
-                    const percent =
-                        Math.floor(
-                            (received /
-                                parseInt(contentLength)) *
-                            100
-                        );
-
-                    document.getElementById("loading")
-                        .textContent =
+                    document.getElementById("loading").textContent =
                         "LOADING... " + percent + "%";
                 }
             }
 
-            const buffer =
-                new Uint8Array(received);
-
+            const buffer = new Uint8Array(received);
             let offset = 0;
 
             for (const chunk of chunks) {
-
                 buffer.set(chunk, offset);
-
                 offset += chunk.length;
             }
 
             return buffer.buffer;
         }
 
-
         function getParts(file, start, end) {
-
             const parts = [];
 
             for (let i = start; i <= end; i++) {
-
                 parts.push(
-                    BASE_URL +
-                    file +
-                    ".part" +
-                    i
+                    BASE_URL + file + ".part" + i
                 );
-
             }
 
             return parts;
         }
 
-
         async function mergeFiles(fileParts) {
+            const buffers = await Promise.all(
+                fileParts.map(fetchWithProgress)
+            );
 
-            const buffers =
-                await Promise.all(
-                    fileParts.map(
-                        fetchWithProgress
+            const mergedBlob = new Blob(buffers);
+
+            return URL.createObjectURL(mergedBlob);
+        }
+
+        async function startGame() {
+            try {
+                document.getElementById("loading").textContent =
+                    "LOADING GAME DATA...";
+
+                // Rebuild the original Unity data file from .part1 + .part2.
+                const dataUrl = await mergeFiles(
+                    getParts(
+                        "Build/THE Verity Mod (beta).data.unityweb",
+                        1,
+                        2
                     )
                 );
 
-            const mergedBlob =
-                new Blob(buffers);
-
-            return URL.createObjectURL(
-                mergedBlob
-            );
-        }
-
-
-        async function startGame() {
-
-            try {
-
-                document.getElementById("loading")
-                    .textContent =
-                    "LOADING GAME DATA...";
-
-
-                /*
-                 * Merge the two pieces of the
-                 * Unity .data.unityweb file.
-                 */
-
-                const dataUrl =
-                    await mergeFiles(
-                        getParts(
-                            "Build/THE Verity Mod (beta).data.unityweb",
-                            1,
-                            2
-                        )
-                    );
-
-
-                /*
-                 * UnityLoader will ask for the
-                 * original .data.unityweb filename.
-                 *
-                 * Redirect that request to our
-                 * merged Blob.
-                 */
-
+                // UnityLoader requests the original data filename.
+                // Redirect that request to our reconstructed Blob.
                 const originalOpen =
                     XMLHttpRequest.prototype.open;
-
 
                 XMLHttpRequest.prototype.open =
                     function(method, url, ...rest) {
@@ -199,17 +142,13 @@
                         const decodedUrl =
                             decodeURIComponent(url);
 
-
                         if (
                             decodedUrl.includes(
                                 "THE Verity Mod (beta).data.unityweb"
                             )
                         ) {
-
                             url = dataUrl;
-
                         }
-
 
                         return originalOpen.call(
                             this,
@@ -217,71 +156,44 @@
                             url,
                             ...rest
                         );
-
                     };
 
-
-                /*
-                 * Load Unity's WebGL loader.
-                 */
-
-                const script =
-                    document.createElement("script");
+                // Load Unity's WebGL loader from GitHub Pages.
+                const script = document.createElement("script");
 
                 script.src =
-                    "Build/UnityLoader.js";
-
+                    BASE_URL + "Build/UnityLoader.js";
 
                 script.onload = function() {
-
                     document.getElementById("loading")
                         .style.display = "none";
 
-
-                    /*
-                     * Start the Unity game.
-                     */
-
+                    // Start the Unity game.
                     UnityLoader.instantiate(
                         "gameContainer",
+                        BASE_URL +
                         "Build/THE Verity Mod (beta).json"
                     );
-
                 };
 
-
                 script.onerror = function() {
-
                     document.getElementById("loading")
                         .textContent =
                         "ERROR LOADING UNITYLOADER.JS";
-
                 };
 
+                document.body.appendChild(script);
 
-                document.body.appendChild(
-                    script
-                );
-
-
-            }
-            catch (error) {
-
+            } catch (error) {
                 console.error(error);
 
                 document.getElementById("loading")
                     .textContent =
                     "ERROR: " + error.message;
-
             }
-
         }
 
-
         startGame();
-
     </script>
-
 </body>
-
 </html>
