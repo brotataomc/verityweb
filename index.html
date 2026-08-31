@@ -27,20 +27,131 @@
 
         #loading {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-family: Arial, sans-serif;
-            font-size: 24px;
-            text-align: center;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             z-index: 10;
+            background:
+                radial-gradient(circle at 50% 35%, #383838 0%, #171717 45%, #070707 100%);
+            color: white;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .loading-card {
+            width: min(560px, calc(100vw - 40px));
+            padding: 34px 36px 30px;
+            box-sizing: border-box;
+            text-align: center;
+            background: rgba(15, 15, 15, 0.92);
+            border: 3px solid #eeeeee;
+            box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.55);
+        }
+
+        .loading-title {
+            margin: 0 0 5px;
+            font-size: clamp(30px, 6vw, 48px);
+            font-weight: 900;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-shadow: 3px 3px 0 #000;
+        }
+
+        .loading-subtitle {
+            margin: 0 0 25px;
+            color: #d0d0d0;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        .spinner {
+            width: 42px;
+            height: 42px;
+            margin: 0 auto 20px;
+            border: 5px solid #444;
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.85s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .progress-shell {
+            width: 100%;
+            height: 18px;
+            margin: 0 auto 12px;
+            background: #292929;
+            border: 2px solid #777;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background: #f5f5f5;
+            transition: width 0.15s ease;
+        }
+
+        #loadingText {
+            margin: 0 0 24px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .fact-box {
+            min-height: 62px;
+            padding: 12px 15px;
+            box-sizing: border-box;
+            background: #202020;
+            border-left: 4px solid #fff;
+            color: #dcdcdc;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .fact-label {
+            display: block;
+            margin-bottom: 4px;
+            color: #fff;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1.5px;
+        }
+
+        @media (max-width: 500px) {
+            .loading-card {
+                padding: 27px 22px 23px;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div id="loading">LOADING...</div>
+    <div id="loading">
+        <div class="loading-card">
+            <div class="spinner"></div>
+
+            <h1 class="loading-title">THE VERITY MOD</h1>
+            <p class="loading-subtitle">BALDI'S BASICS WEB EDITION</p>
+
+            <div class="progress-shell">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+
+            <p id="loadingText">LOADING GAME DATA... 0%</p>
+
+            <div class="fact-box">
+                <span class="fact-label">DID YOU KNOW?</span>
+                <span id="factText">
+                    Baldi's Basics was originally made for the 2018 Meta Game Jam.
+                </span>
+            </div>
+        </div>
+    </div>
+
     <div id="gameContainer"></div>
 
     <script>
@@ -49,6 +160,47 @@
         // can load this page while the actual game files stay online.
         const BASE_URL =
             "https://brotataomc-boop.github.io/verityweb/";
+
+        const facts = [
+            "Baldi's Basics was originally made for the 2018 Meta Game Jam.",
+            "The game was designed as a parody of 1990s educational games.",
+            "Baldi's full name is Baldi, and his subject is mathematics.",
+            "The original Baldi's Basics game was created by Micah McGonigal, also known as mystman12.",
+            "The classic game uses intentionally simple, low-resolution visuals as part of its style.",
+            "Notebooks are one of the most recognizable parts of Baldi's Basics.",
+            "The school is filled with characters and objects that can make getting around much harder."
+        ];
+
+        let factIndex = 0;
+
+        function showNextFact() {
+            const factText = document.getElementById("factText");
+
+            if (!factText) return;
+
+            factText.textContent = facts[factIndex];
+            factIndex = (factIndex + 1) % facts.length;
+        }
+
+        showNextFact();
+        setInterval(showNextFact, 4500);
+
+        function setLoadingText(text) {
+            const loadingText = document.getElementById("loadingText");
+
+            if (loadingText) {
+                loadingText.textContent = text;
+            }
+        }
+
+        function setProgress(percent) {
+            const progressBar = document.getElementById("progressBar");
+
+            if (progressBar) {
+                progressBar.style.width =
+                    Math.max(0, Math.min(100, percent)) + "%";
+            }
+        }
 
         async function fetchWithProgress(url) {
             const response = await fetch(url);
@@ -79,8 +231,10 @@
                         (received / parseInt(contentLength, 10)) * 100
                     );
 
-                    document.getElementById("loading").textContent =
-                        "LOADING... " + percent + "%";
+                    setProgress(percent);
+                    setLoadingText(
+                        "DOWNLOADING GAME DATA... " + percent + "%"
+                    );
                 }
             }
 
@@ -119,8 +273,8 @@
 
         async function startGame() {
             try {
-                document.getElementById("loading").textContent =
-                    "LOADING GAME DATA...";
+                setProgress(0);
+                setLoadingText("LOADING GAME DATA...");
 
                 // Rebuild the original Unity data file from .part1 + .part2.
                 const dataUrl = await mergeFiles(
@@ -177,9 +331,9 @@
                 };
 
                 script.onerror = function() {
-                    document.getElementById("loading")
-                        .textContent =
-                        "ERROR LOADING UNITYLOADER.JS";
+                    setLoadingText(
+                        "ERROR LOADING UNITYLOADER.JS"
+                    );
                 };
 
                 document.body.appendChild(script);
@@ -187,9 +341,9 @@
             } catch (error) {
                 console.error(error);
 
-                document.getElementById("loading")
-                    .textContent =
-                    "ERROR: " + error.message;
+                setLoadingText(
+                    "ERROR: " + error.message
+                );
             }
         }
 
