@@ -4,48 +4,209 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Verity</title>
+  <title>THE Verity Mod</title>
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #231F20; overflow: hidden; font-family: Arial, Helvetica, sans-serif; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: #231F20; overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+    }
     #gameContainer { position: absolute; inset: 0; width: 100%; height: 100%; }
-    #gameContainer canvas { width: 100% !important; height: 100% !important; display: block; background: #231F20; }
-    #loadingBar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; color: #fff; z-index: 5; }
-    #loadingTitle { font-size: 28px; font-weight: bold; margin-bottom: 16px; letter-spacing: 1px; }
-    #barEmpty { width: 260px; height: 18px; margin: 0 auto; background: #444; border-radius: 9px; overflow: hidden; }
-    #barFull { width: 0%; height: 100%; background: #fff; }
+    #gameContainer canvas {
+      width: 100% !important; height: 100% !important;
+      display: block; background: #231F20;
+    }
+    #loadingBar {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(320px, calc(100vw - 48px));
+      text-align: center; color: #fff; z-index: 5;
+    }
+    #loadingTitle {
+      font-size: 27px; font-weight: bold;
+      margin-bottom: 16px; letter-spacing: 1px;
+    }
+    #barEmpty {
+      width: 100%; height: 16px; margin: 0 auto;
+      background: #444; border-radius: 9px; overflow: hidden;
+    }
+    #barFull {
+      width: 0%; height: 100%; background: #fff;
+      transition: width .15s ease;
+    }
     #loadingText { margin-top: 10px; font-size: 14px; }
-    #fullscreenButton { position: absolute; right: 12px; bottom: 12px; width: 38px; height: 38px; cursor: pointer; opacity: .7; border: 0; border-radius: 6px; z-index: 6; background: rgba(0,0,0,.55) center/22px no-repeat url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='white'><path d='M3 3h7v2H5v5H3zM14 3h7v7h-2V5h-5zM3 14h2v5h5v2H3zM19 14h2v7h-7v-2h5z'/></svg>"); }
+    #loadingHint {
+      margin-top: 9px; color: #aaa; font-size: 11px;
+      line-height: 1.4;
+    }
+    #fullscreenButton {
+      position: absolute; right: 12px; bottom: 12px;
+      width: 38px; height: 38px; cursor: pointer; opacity: .7;
+      border: 0; border-radius: 6px; z-index: 6;
+      background: rgba(0,0,0,.55) center/22px no-repeat
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='white'><path d='M3 3h7v2H5v5H3zM14 3h7v7h-2V5h-5zM3 14h2v5h5v2H3zM19 14h2v7h-7v-2h5z'/></svg>");
+    }
     #fullscreenButton:hover { opacity: 1; }
+    #errorBox {
+      display: none; margin-top: 16px; padding: 12px;
+      color: #ffdede; background: #5a2020; border-radius: 6px;
+      font-size: 12px; line-height: 1.5; text-align: left;
+      overflow-wrap: anywhere; white-space: pre-wrap;
+    }
   </style>
   <script src="Build/UnityLoader.js"></script>
-  <script>
-    // Old-style (Unity 2017/2018) WebGL build: Build/folder.json is the manifest.
-    var gameInstance = UnityLoader.instantiate("gameContainer", "Build/folder.json", {
-      onProgress: function (instance, progress) {
-        var pct = Math.round(progress * 100);
-        document.getElementById("barFull").style.width = pct + "%";
-        document.getElementById("loadingText").textContent = pct + "%";
-        if (progress === 1) {
-          setTimeout(function () {
-            document.getElementById("loadingBar").style.display = "none";
-          }, 300);
-        }
-      }
-    });
-    window.addEventListener("load", function () {
-      document.getElementById("fullscreenButton").onclick = function () {
-        gameInstance.SetFullscreen(1);
-      };
-    });
-  </script>
 </head>
 <body>
   <div id="gameContainer"></div>
   <div id="loadingBar">
     <div id="loadingTitle">THE Verity Mod</div>
     <div id="barEmpty"><div id="barFull"></div></div>
-    <div id="loadingText">Loading... 0%</div>
+    <div id="loadingText">Preparing game... 0%</div>
+    <div id="loadingHint">The game is downloading its data. This may take a little while.</div>
+    <div id="errorBox"></div>
   </div>
   <button id="fullscreenButton" title="Fullscreen" aria-label="Fullscreen"></button>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var loadingBar = document.getElementById("loadingBar");
+      var loadingText = document.getElementById("loadingText");
+      var loadingHint = document.getElementById("loadingHint");
+      var barFull = document.getElementById("barFull");
+      var errorBox = document.getElementById("errorBox");
+      var gameInstance = null;
+      var dataBlobUrl = null;
+      var manifestBlobUrl = null;
+
+      function setProgress(percent, message) {
+        barFull.style.width = Math.max(0, Math.min(100, percent)) + "%";
+        loadingText.textContent = message || (Math.round(percent) + "%");
+      }
+
+      function fail(message) {
+        loadingText.textContent = "Could not start the game";
+        loadingHint.style.display = "none";
+        errorBox.style.display = "block";
+        errorBox.textContent = message;
+      }
+
+      function fetchBlob(url, label, start, span) {
+        return new Promise(function (resolve, reject) {
+          var request = new XMLHttpRequest();
+          request.open("GET", url, true);
+          request.responseType = "blob";
+          request.onprogress = function (event) {
+            if (event.lengthComputable) {
+              var partProgress = event.loaded / event.total;
+              setProgress(start + span * partProgress, "Downloading " + label + "...");
+            } else {
+              setProgress(start, "Downloading " + label + "...");
+            }
+          };
+          request.onload = function () {
+            if (request.status >= 200 && request.status < 300) {
+              resolve(request.response);
+            } else {
+              reject(new Error("HTTP " + request.status + " while downloading " + label));
+            }
+          };
+          request.onerror = function () {
+            reject(new Error("Network error while downloading " + label));
+          };
+          request.onabort = function () {
+            reject(new Error("Download cancelled: " + label));
+          };
+          request.send();
+        });
+      }
+
+      function startUnity(manifest) {
+        var buildRoot = new URL("Build/", window.location.href);
+
+        // UnityLoader detects Unity's compression format from the data bytes,
+        // so the temporary Blob URL can safely replace the original filename.
+        manifest.dataUrl = dataBlobUrl;
+        manifest.wasmCodeUrl = new URL(
+          "THE%20Verity%20Mod%20(beta).wasm.code.unityweb", buildRoot
+        ).href;
+        manifest.wasmFrameworkUrl = new URL(
+          "THE%20Verity%20Mod%20(beta).wasm.framework.unityweb", buildRoot
+        ).href;
+
+        manifestBlobUrl = URL.createObjectURL(new Blob(
+          [JSON.stringify(manifest)], { type: "application/json" }
+        ));
+
+        setProgress(0, "Starting Unity...");
+        loadingHint.textContent = "Almost there...";
+        gameInstance = UnityLoader.instantiate("gameContainer", manifestBlobUrl, {
+          onProgress: function (instance, progress) {
+            var percent = Math.round(progress * 100);
+            setProgress(percent, "Loading game... " + percent + "%");
+            if (progress === 1) {
+              setTimeout(function () {
+                loadingBar.style.display = "none";
+                if (dataBlobUrl) URL.revokeObjectURL(dataBlobUrl);
+                if (manifestBlobUrl) URL.revokeObjectURL(manifestBlobUrl);
+              }, 500);
+            }
+          }
+        });
+
+        document.getElementById("fullscreenButton").onclick = function () {
+          if (gameInstance) gameInstance.SetFullscreen(1);
+        };
+      }
+
+      async function boot() {
+        try {
+          setProgress(1, "Reading game files...");
+          var manifestUrl = new URL(
+            "Build/THE%20Verity%20Mod%20(beta).json", window.location.href
+          );
+          var manifestResponse = await fetch(manifestUrl.href);
+          if (!manifestResponse.ok) {
+            throw new Error(
+              "Could not load the Unity manifest (HTTP " + manifestResponse.status + ")."
+            );
+          }
+          var manifest = await manifestResponse.json();
+
+          setProgress(3, "Preparing game data...");
+          var part1Url = new URL(
+            "THE%20Verity%20Mod%20(beta).data.unityweb.part1", manifestUrl
+          ).href;
+          var part2Url = new URL(
+            "THE%20Verity%20Mod%20(beta).data.unityweb.part2", manifestUrl
+          ).href;
+
+          // Download both chunks and join them in their original order.
+          var parts = await Promise.all([
+            fetchBlob(part1Url, "data file (part 1 of 2)", 3, 47),
+            fetchBlob(part2Url, "data file (part 2 of 2)", 50, 47)
+          ]);
+
+          setProgress(98, "Joining game data...");
+          dataBlobUrl = URL.createObjectURL(new Blob(
+            parts, { type: "application/octet-stream" }
+          ));
+          parts = null;
+
+          setProgress(99, "Launching Unity...");
+          startUnity(manifest);
+        } catch (error) {
+          console.error(error);
+          fail(
+            (error && error.message ? error.message : String(error)) +
+            "\n\nPlease refresh and try again. If it keeps happening, send this message to the person hosting the game."
+          );
+        }
+      }
+
+      boot();
+    })();
+  </script>
 </body>
 </html>
